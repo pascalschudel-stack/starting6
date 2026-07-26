@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Volleyball Team Builder</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#1976d2">
+    <link rel="icon" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+    <!-- Bibliothek für den PDF Export (lokal eingebettet für Offline-Nutzung) -->
+    <script src="vendor/html2pdf.bundle.min.js"></script>
+
+    <!-- Polyfill für Drag & Drop auf Touchscreens (iPad/Mobile) -->
+    <link rel="stylesheet" href="vendor/mobile-drag-drop.css">
+    <script src="vendor/mobile-drag-drop.min.js"></script>
+    <script src="vendor/mobile-drag-drop-scroll-behaviour.min.js"></script>
+    <script>
+        // Aktiviert den Touch-Support für Drag & Drop
+        MobileDragDrop.polyfill({
+            dragImageTranslateOverride: MobileDragDrop.scrollBehaviourDragImageTranslateOverride
+        });
+        // Verhindert das Scrollen beim Ziehen auf Touch-Geräten
+        window.addEventListener('touchmove', function() {}, {passive: false});
+    </script>
+
+    <style>
+        body { font-family: sans-serif; display: flex; gap: 20px; padding: 20px; background-color: #f4f4f9; margin: 0; }
+
+        /* Linker Bereich: Toolbar & Listen */
+        #pool-container {
+            width: 420px;
+            background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column; max-height: 90vh;
+        }
+
+        .toolbar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .controls { display: flex; gap: 10px; font-size: 0.9em; }
+        .controls select { flex: 1; padding: 5px; border: 1px solid #ccc; border-radius: 4px; }
+
+        .btn-primary { width: 100%; padding: 10px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-primary:hover { background: #1565c0; }
+        .btn-secondary { width: 100%; padding: 10px; background: #e0e0e0; color: #333; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px;}
+        .btn-secondary:hover { background: #ccc; }
+
+        /* Listenbereiche */
+        h3 { margin: 0 0 10px 0; font-size: 1.1em; color: #333; }
+
+        #pool, #unavailable {
+            overflow-y: auto; padding-right: 5px;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start;
+        }
+        #pool { flex-grow: 1; min-height: 150px; margin-bottom: 15px; }
+        #unavailable {
+            min-height: 80px; max-height: 200px; margin-bottom: 15px;
+            background: #fafafa; border: 2px dashed #ddd; padding: 10px; border-radius: 6px;
+        }
+
+        .player-card {
+            background: #ffffff; border: 1px solid #ccc; padding: 8px;
+            border-radius: 4px; cursor: grab; font-weight: bold; position: relative;
+            transition: all 0.2s ease; box-sizing: border-box;
+            text-align: left; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            /* Wichtig für iOS/iPad: Deaktiviert Standard-Touch-Aktionen beim Wischen über die Karte */
+            touch-action: none;
+        }
+        .player-card:active { cursor: grabbing; box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+        .player-name { pointer-events: none; display: block; margin-bottom: 6px; margin-right: 20px; font-size: 1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+
+        /* Badges */
+        .role-badges { display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
+        .badge { font-size: 0.65em; padding: 2px 5px; border-radius: 10px; border: 1px solid; font-weight: normal; }
+
+        .badge-zs { background: #e3f2fd; color: #1565c0; border-color: #90caf9; }
+        .badge-zs.pref { background: #1976d2; color: white; border-color: #1565c0; }
+
+        .badge-aa { background: #fce4ec; color: #c2185b; border-color: #f48fb1; }
+        .badge-aa.pref { background: #d81b60; color: white; border-color: #c2185b; }
+
+        .badge-mb { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+        .badge-mb.pref { background: #388e3c; color: white; border-color: #2e7d32; }
+
+        .badge-d { background: #fff3e0; color: #e65100; border-color: #ffcc80; }
+        .badge-d.pref { background: #f57c00; color: white; border-color: #e65100; }
+
+        .badge-l { background: #f3e5f5; color: #7b1fa2; border-color: #ce93d8; }
+        .badge-l.pref { background: #8e24aa; color: white; border-color: #7b1fa2; }
+
+        .role-selector { width: 100%; padding: 4px; font-size: 0.8em; border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer; }
+
+        #pool .role-selector, #unavailable .role-selector { display: none; }
+        #court-container .role-badges { display: none; }
+        #court-container .player-card { width: 90%; margin: 0; }
+
+        .player-card.highlight { background: #e8f5e9; border-color: #4caf50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.6); transform: scale(1.02); }
+        .player-card.dimmed { opacity: 0.3; filter: grayscale(50%); }
+
+        .edit-btn { position: absolute; top: 3px; right: 3px; background: transparent; border: none; cursor: pointer; font-size: 1.1em; color: #666; padding: 2px 5px; border-radius: 3px; }
+        .edit-btn:hover { background: rgba(0, 0, 0, 0.05); color: #000; }
+
+        /* Rechter Bereich: Match Info, Spielfeld & PDF */
+        #court-container { flex-grow: 1; display: flex; flex-direction: column; align-items: center; }
+
+        #export-area {
+            display: flex; flex-direction: column; align-items: center;
+            background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 100%; max-width: 650px;
+        }
+
+        /* Match Info Header */
+        .match-header { display: flex; gap: 10px; width: 100%; margin-bottom: 20px; }
+        .match-header input, .match-header select {
+            padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em;
+        }
+        #match-opponent { flex-grow: 1; }
+        #match-score { width: 90px; text-align: center; }
+
+        #court {
+            display: grid; grid-template-columns: repeat(3, 150px); grid-template-rows: repeat(2, 120px); gap: 10px;
+            background: #ffcc80; padding: 20px; border: 5px solid white; outline: 3px solid #ff9800; border-radius: 8px; position: relative;
+        }
+        #court::before { content: "NETZ"; position: absolute; top: -25px; left: 0; right: 0; text-align: center; font-weight: bold; color: #d32f2f; border-bottom: 4px dashed #d32f2f; }
+
+        .slot {
+            background: rgba(255, 255, 255, 0.6); border: 2px dashed #888; border-radius: 4px;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 80px; cursor: pointer; transition: background 0.2s;
+        }
+        .slot:hover { background: rgba(255, 255, 255, 0.8); }
+        .slot.active-filter { border-color: #4caf50; background: rgba(76, 175, 80, 0.1); }
+        .slot-title { font-size: 0.8em; color: #666; margin-bottom: 5px; pointer-events: none; }
+
+        #libero-slot-container { margin-top: 20px; display: flex; gap: 20px; }
+        .libero-slot { width: 150px; height: 100px; border-color: #8e24aa; background: #f3e5f5; }
+
+        .slot.warning { border-color: #f44336; background: #ffcdd2; }
+        .warning-icon { color: #f44336; font-size: 1.2em; display: none; margin-top: 5px; pointer-events: none; }
+        .slot.warning .warning-icon { display: block; }
+
+        /* Aktions-Buttons unterm Feld */
+        .court-actions { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; align-items: center; width: 100%; max-width: 650px; }
+        .reset-group { display: flex; gap: 20px; }
+
+        .btn-reset {
+            font-size: 0.8em; padding: 6px 12px;
+            background: #e0e0e0; color: #555; border: 1px solid #ccc; border-radius: 4px;
+            cursor: pointer; transition: background 0.2s; font-weight: bold;
+        }
+        .btn-reset:hover { background: #d0d0d0; }
+
+        #btn-export-pdf { background: #4caf50; color: white; border-color: #388e3c; width: 100%; padding: 12px; font-size: 1em; }
+        #btn-export-pdf:hover { background: #43a047; }
+
+        /* Modals */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .modal-content h3 { margin-top: 0; margin-bottom: 15px; }
+        .modal-content input[type="text"] { width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+
+        .role-matrix { display: grid; grid-template-columns: 3fr 1fr 1fr; gap: 5px; margin-bottom: 15px; font-size: 0.85em; text-align: center; align-items: center; }
+        .role-matrix .header { font-weight: bold; color: #555; font-size: 0.8em; margin-bottom: 5px; }
+        .role-matrix .role-label { text-align: left; }
+        .role-matrix input[type="checkbox"] { cursor: pointer; }
+
+        /* --- Mobile / Handy-Layout --- */
+        @media (max-width: 700px) {
+            body { flex-direction: column; padding: 10px; gap: 10px; }
+
+            #pool-container { width: 100%; max-height: none; box-sizing: border-box; }
+            #court-container { width: 100%; }
+
+            #export-area { padding: 12px; max-width: 100%; box-sizing: border-box; }
+
+            .match-header { flex-wrap: wrap; }
+            .match-header input, .match-header select { flex: 1 1 45%; min-width: 0; }
+
+            #court {
+                grid-template-columns: repeat(3, 1fr);
+                grid-template-rows: repeat(2, 1fr);
+                gap: 6px; padding: 12px 8px 8px;
+                width: 100%; box-sizing: border-box;
+            }
+            .slot { min-height: 64px; padding: 4px; }
+            .slot-title { font-size: 0.7em; }
+
+            #libero-slot-container { width: 100%; gap: 10px; margin-top: 12px; }
+            .libero-slot { width: 100%; height: 72px; }
+
+            .court-actions { max-width: 100%; }
+            .reset-group { width: 100%; }
+            .btn-reset { flex: 1; min-height: 44px; }
+            #btn-export-pdf { min-height: 48px; }
+
+            .player-card { min-height: 44px; }
+            .btn-primary, .btn-secondary { min-height: 44px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Linker Bereich -->
+    <div id="pool-container">
+        <div class="toolbar">
+            <div class="controls">
+                <select id="sort-by">
+                    <option value="name">Sort.: A-Z</option>
+                    <option value="position">Sort.: Position</option>
+                </select>
+                <select id="filter-pos">
+                    <option value="all">Filter: Alle</option>
+                    <option value="Zuspiel">Zuspiel</option>
+                    <option value="Außenangriff">Außenangriff</option>
+                    <option value="Mittelblock">Mittelblock</option>
+                    <option value="Diagonal">Diagonal</option>
+                    <option value="Libero">Libero</option>
+                </select>
+            </div>
+        </div>
+
+        <h3>Reserve</h3>
+        <div id="pool" class="slot" style="border: none; background: transparent; cursor: default;"></div>
+
+        <h3>Nicht verfügbar</h3>
+        <div id="unavailable" class="slot" style="cursor: default;"></div>
+
+        <button id="btn-open-add" class="btn-primary">+ Neue Spielerin</button>
+    </div>
+
+    <!-- Rechter Bereich -->
+    <div id="court-container">
+
+        <!-- Bereich der ins PDF gedruckt wird -->
+        <div id="export-area">
+
+            <!-- Match Info -->
+            <div class="match-header">
+                <input type="date" id="match-date">
+                <input type="text" id="match-opponent" placeholder="Gegnerisches Team">
+                <select id="match-set">
+                    <option value="Satz1">Satz 1</option>
+                    <option value="Satz2">Satz 2</option>
+                    <option value="Satz3">Satz 3</option>
+                    <option value="Satz4">Satz 4</option>
+                    <option value="Satz5">Satz 5</option>
+                </select>
+                <input type="text" id="match-score" placeholder="Resultat">
+            </div>
+
+            <div id="court">
+                <div class="slot" id="pos4" data-req="Außenangriff"><div class="slot-title">Pos 4 (Außen)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos3" data-req="Mittelblock"><div class="slot-title">Pos 3 (Mitte)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos2" data-req="Zuspiel,Diagonal"><div class="slot-title">Pos 2 (Zuspiel/Diag)</div><div class="warning-icon">⚠️</div></div>
+
+                <div class="slot" id="pos5" data-req="Außenangriff"><div class="slot-title">Pos 5 (Außen)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos6" data-req="Mittelblock"><div class="slot-title">Pos 6 (Mitte)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos1" data-req="Zuspiel,Diagonal"><div class="slot-title">Pos 1 (Zuspiel/Diag)</div><div class="warning-icon">⚠️</div></div>
+            </div>
+
+            <div id="libero-slot-container">
+                <div class="slot libero-slot" id="libero-slot-1" data-req="Libero"><div class="slot-title">Libero 1</div><div class="warning-icon">⚠️ Falsche Position</div></div>
+                <div class="slot libero-slot" id="libero-slot-2" data-req="Libero"><div class="slot-title">Libero 2</div><div class="warning-icon">⚠️ Falsche Position</div></div>
+            </div>
+        </div>
+
+        <!-- Aktions-Buttons (Nicht im PDF) -->
+        <div class="court-actions">
+            <div class="reset-group">
+                <button id="btn-reset-court" class="btn-reset">🔄 Feld leeren</button>
+                <button id="btn-reset-libero" class="btn-reset">🔄 Liberos leeren</button>
+            </div>
+            <button id="btn-export-pdf" class="btn-reset">📥 Aufstellung als PDF exportieren</button>
+        </div>
+
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="player-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modal-title">Neue Spielerin</h3>
+            <input type="text" id="modal-name" placeholder="Name eingeben...">
+
+            <div class="role-matrix" id="modal-matrix">
+                <div></div><div class="header">Möglich</div><div class="header">Bevorzugt</div>
+                <div class="role-label">Zuspiel</div><div><input type="checkbox" value="Zuspiel" class="chk-possible"></div><div><input type="checkbox" value="Zuspiel" class="chk-pref"></div>
+                <div class="role-label">Außenangriff</div><div><input type="checkbox" value="Außenangriff" class="chk-possible"></div><div><input type="checkbox" value="Außenangriff" class="chk-pref"></div>
+                <div class="role-label">Mittelblock</div><div><input type="checkbox" value="Mittelblock" class="chk-possible"></div><div><input type="checkbox" value="Mittelblock" class="chk-pref"></div>
+                <div class="role-label">Diagonal</div><div><input type="checkbox" value="Diagonal" class="chk-possible"></div><div><input type="checkbox" value="Diagonal" class="chk-pref"></div>
+                <div class="role-label">Libero</div><div><input type="checkbox" value="Libero" class="chk-possible"></div><div><input type="checkbox" value="Libero" class="chk-pref"></div>
+            </div>
+
+            <button id="btn-save-modal" class="btn-primary">Speichern</button>
+            <button id="btn-cancel-modal" class="btn-secondary">Abbrechen</button>
+        </div>
+    </div>
+
+    <script>
+        let playerIdCounter = 1;
+        let editingPlayerId = null;
+
+        // --- Core Functions & State Management ---
+        function saveState() {
+            const players = [];
+            document.querySelectorAll('.player-card').forEach(card => {
+                players.push({
+                    id: card.id,
+                    name: card.querySelector('.player-name').innerText,
+                    roles: card.getAttribute('data-roles'),
+                    prefs: card.getAttribute('data-prefs'),
+                    location: card.parentElement.id,
+                    currentRole: card.querySelector('.role-selector').value
+                });
+            });
+            localStorage.setItem('vb_players', JSON.stringify(players));
+            localStorage.setItem('vb_counter', playerIdCounter);
+        }
+
+        function loadState() {
+            const savedPlayers = JSON.parse(localStorage.getItem('vb_players')) || [];
+            playerIdCounter = parseInt(localStorage.getItem('vb_counter')) || 1;
+
+            savedPlayers.forEach(p => {
+                const roles = p.roles.split(',');
+                const prefs = p.prefs ? p.prefs.split(',') : [];
+                createPlayerElement(p.id, p.name, roles, prefs, p.location, p.currentRole);
+            });
+            applyFilterAndSort();
+        }
+
+        // --- Date Initialisierung ---
+        function setTodayDate() {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            document.getElementById('match-date').value = `${yyyy}-${mm}-${dd}`;
+        }
+
+        // --- UI Builder ---
+        function getRoleClass(role) {
+            const map = {
+                'Zuspiel': 'badge-zs', 'Außenangriff': 'badge-aa', 'Mittelblock': 'badge-mb',
+                'Diagonal': 'badge-d', 'Libero': 'badge-l'
+            };
+            return map[role] || '';
+        }
+
+        function buildBadgesHTML(rolesArray, prefsArray) {
+            return rolesArray.map(role => {
+                const isPref = prefsArray.includes(role);
+                const roleClass = getRoleClass(role);
+                return `<span class="badge ${roleClass} ${isPref ? 'pref' : ''}">${role.substring(0,4)}. ${isPref ? '★' : ''}</span>`;
+            }).join('');
+        }
+
+        function createRoleOptions(rolesArray) {
+            return rolesArray.map(role => `<option value="${role}">${role}</option>`).join('');
+        }
+
+        function createPlayerElement(id, name, roles, prefs, locationId = 'pool', currentRole = null) {
+            const card = document.createElement('div');
+            card.className = 'player-card';
+            card.draggable = true;
+            card.id = id;
+            card.setAttribute('data-roles', roles.join(','));
+            card.setAttribute('data-prefs', prefs.join(','));
+
+            card.innerHTML = `
+                <button class="edit-btn" onclick="openModal('${id}', event)">✎</button>
+                <span class="player-name">${name}</span>
+                <div class="role-badges">${buildBadgesHTML(roles, prefs)}</div>
+                <select class="role-selector">${createRoleOptions(roles)}</select>
+            `;
+
+            if (currentRole && roles.includes(currentRole)) card.querySelector('.role-selector').value = currentRole;
+            addDragListener(card);
+
+            const targetContainer = document.getElementById(locationId) || document.getElementById('pool');
+            targetContainer.appendChild(card);
+
+            if (targetContainer.id !== 'pool' && targetContainer.id !== 'unavailable') checkPositionWarning(targetContainer, card);
+            return card;
+        }
+
+        // --- Filter & Sort Logic ---
+        function applyFilterAndSort() {
+            const filterVal = document.getElementById('filter-pos').value;
+            const sortVal = document.getElementById('sort-by').value;
+
+            ['pool', 'unavailable'].forEach(containerId => {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+
+                const cards = Array.from(container.querySelectorAll('.player-card'));
+                cards.sort((a, b) => {
+                    if (sortVal === 'name') return a.querySelector('.player-name').innerText.toLowerCase().localeCompare(b.querySelector('.player-name').innerText.toLowerCase());
+                    return a.getAttribute('data-roles').localeCompare(b.getAttribute('data-roles'));
+                });
+
+                cards.forEach(card => {
+                    const roles = card.getAttribute('data-roles').split(',');
+                    card.style.display = (filterVal === 'all' || roles.includes(filterVal)) ? 'block' : 'none';
+                    container.appendChild(card);
+                });
+            });
+        }
+
+        document.getElementById('filter-pos').addEventListener('change', applyFilterAndSort);
+        document.getElementById('sort-by').addEventListener('change', applyFilterAndSort);
+
+        // --- Modal (Add / Edit) ---
+        const modal = document.getElementById('player-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalName = document.getElementById('modal-name');
+        const matrix = document.getElementById('modal-matrix');
+
+        matrix.addEventListener('change', (e) => {
+            if (e.target.classList.contains('chk-pref') && e.target.checked) e.target.parentElement.previousElementSibling.querySelector('.chk-possible').checked = true;
+            if (e.target.classList.contains('chk-possible') && !e.target.checked) e.target.parentElement.nextElementSibling.querySelector('.chk-pref').checked = false;
+        });
+
+        document.getElementById('btn-open-add').addEventListener('click', () => openModal(null));
+        document.getElementById('btn-cancel-modal').addEventListener('click', () => { modal.style.display = 'none'; });
+
+        window.openModal = function(id, event) {
+            if (event) event.stopPropagation();
+            editingPlayerId = id;
+            modalName.value = '';
+            matrix.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+
+            if (id) {
+                modalTitle.innerText = "Spielerin bearbeiten";
+                const card = document.getElementById(id);
+                modalName.value = card.querySelector('.player-name').innerText;
+                const roles = card.getAttribute('data-roles').split(',');
+                const prefs = card.getAttribute('data-prefs') ? card.getAttribute('data-prefs').split(',') : [];
+
+                matrix.querySelectorAll('.chk-possible').forEach(cb => cb.checked = roles.includes(cb.value));
+                matrix.querySelectorAll('.chk-pref').forEach(cb => cb.checked = prefs.includes(cb.value));
+            } else {
+                modalTitle.innerText = "Neue Spielerin";
+            }
+            modal.style.display = 'flex';
+        };
+
+        document.getElementById('btn-save-modal').addEventListener('click', () => {
+            const name = modalName.value.trim();
+            const roles = Array.from(matrix.querySelectorAll('.chk-possible:checked')).map(cb => cb.value);
+            const prefs = Array.from(matrix.querySelectorAll('.chk-pref:checked')).map(cb => cb.value);
+
+            if (!name) return alert('Bitte gib einen Namen ein.');
+            if (roles.length === 0) return alert('Bitte wähle mindestens eine mögliche Position aus.');
+
+            if (editingPlayerId) {
+                const card = document.getElementById(editingPlayerId);
+                const roleSelector = card.querySelector('.role-selector');
+                const previousSelection = roleSelector.value;
+
+                card.querySelector('.player-name').innerText = name;
+                card.setAttribute('data-roles', roles.join(','));
+                card.setAttribute('data-prefs', prefs.join(','));
+                card.querySelector('.role-badges').innerHTML = buildBadgesHTML(roles, prefs);
+                roleSelector.innerHTML = createRoleOptions(roles);
+
+                if (roles.includes(previousSelection)) roleSelector.value = previousSelection;
+                if (card.parentElement.id !== 'pool' && card.parentElement.id !== 'unavailable') checkPositionWarning(card.parentElement, card);
+            } else {
+                createPlayerElement('p' + playerIdCounter++, name, roles, prefs);
+            }
+
+            modal.style.display = 'none';
+            applyFilterAndSort();
+            saveState();
+            clearHighlights();
+        });
+
+        // --- Drag & Drop ---
+        function addDragListener(element) { element.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', e.target.id); }); }
+
+        document.querySelectorAll('.slot').forEach(slot => {
+            slot.addEventListener('dragover', e => e.preventDefault());
+            slot.addEventListener('drop', handleDrop);
+
+            if (slot.id !== 'pool' && slot.id !== 'unavailable') {
+                slot.addEventListener('click', (e) => {
+                    if (['SELECT', 'BUTTON', 'OPTION'].includes(e.target.tagName)) return;
+                    e.stopPropagation();
+                    clearHighlights();
+                    slot.classList.add('active-filter');
+
+                    const req = slot.getAttribute('data-req').split(',');
+                    document.querySelectorAll('#pool .player-card').forEach(p => {
+                        const hasMatch = p.getAttribute('data-roles').split(',').some(r => req.includes(r));
+                        p.classList.add(hasMatch ? 'highlight' : 'dimmed');
+                    });
+                });
+            }
+        });
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const playerId = e.dataTransfer.getData('text/plain');
+            const playerCard = document.getElementById(playerId);
+            const targetSlot = e.target.closest('.slot');
+
+            if (targetSlot && playerCard) {
+                const isListArea = targetSlot.id === 'pool' || targetSlot.id === 'unavailable';
+                if (!isListArea) {
+                    const existingPlayer = targetSlot.querySelector('.player-card');
+                    if (existingPlayer) document.getElementById('pool').appendChild(existingPlayer);
+                }
+
+                targetSlot.appendChild(playerCard);
+
+                if (!isListArea) {
+                    const requiredRoles = targetSlot.getAttribute('data-req').split(',');
+                    const roleSelector = playerCard.querySelector('.role-selector');
+                    const possibleRoles = Array.from(roleSelector.options).map(o => o.value);
+                    if (!requiredRoles.includes(roleSelector.value)) {
+                        const match = possibleRoles.find(r => requiredRoles.includes(r));
+                        if (match) roleSelector.value = match;
+                    }
+                    checkPositionWarning(targetSlot, playerCard);
+                } else {
+                    applyFilterAndSort();
+                }
+                clearHighlights();
+                saveState();
+            }
+        }
+
+        document.addEventListener('change', (e) => {
+            if (e.target.classList.contains('role-selector')) {
+                const card = e.target.closest('.player-card');
+                if (card.parentElement.id !== 'pool' && card.parentElement.id !== 'unavailable') checkPositionWarning(card.parentElement, card);
+                saveState();
+            }
+        });
+
+        function checkPositionWarning(slot, player) {
+            if (slot.id === 'pool' || slot.id === 'unavailable') { slot.classList.remove('warning'); return; }
+            const required = slot.getAttribute('data-req').split(',');
+            const selected = player.querySelector('.role-selector').value;
+            slot.classList.toggle('warning', !required.includes(selected));
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('.player-card').forEach(p => p.classList.remove('highlight', 'dimmed'));
+            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active-filter'));
+        }
+        document.body.addEventListener('click', (e) => { if (!e.target.closest('.slot')) clearHighlights(); });
+
+        // --- Reset Buttons ---
+        function resetSlots(selector) {
+            const slots = document.querySelectorAll(selector);
+            const pool = document.getElementById('pool');
+            slots.forEach(slot => {
+                const playerCard = slot.querySelector('.player-card');
+                if (playerCard) {
+                    pool.appendChild(playerCard);
+                    slot.classList.remove('warning');
+                }
+            });
+            applyFilterAndSort();
+            saveState();
+        }
+
+        document.getElementById('btn-reset-court').addEventListener('click', () => resetSlots('#court .slot'));
+        document.getElementById('btn-reset-libero').addEventListener('click', () => resetSlots('#libero-slot-container .slot'));
+
+        // --- PDF Export ---
+        document.getElementById('btn-export-pdf').addEventListener('click', () => {
+            const dateVal = document.getElementById('match-date').value;
+            const opponentVal = document.getElementById('match-opponent').value.trim() || 'Gegner';
+            const setVal = document.getElementById('match-set').value;
+
+            const formattedDate = dateVal.replace(/-/g, '');
+            const cleanOpponent = opponentVal.replace(/[^a-zA-Z0-9]/g, '_');
+            const filename = `${formattedDate}_${cleanOpponent}_${setVal}.pdf`;
+
+            const element = document.getElementById('export-area');
+
+            // Ausblenden von Edit-Buttons, Dropdowns und Tags für den Export
+            const editBtns = element.querySelectorAll('.edit-btn');
+            const roleSelectors = element.querySelectorAll('.role-selector');
+            const roleBadges = element.querySelectorAll('.role-badges');
+
+            editBtns.forEach(btn => btn.style.display = 'none');
+            roleSelectors.forEach(sel => sel.style.display = 'none');
+            roleBadges.forEach(badge => badge.style.display = 'none');
+
+            const opt = {
+                margin:       10,
+                filename:     filename,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2 },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                // Elemente nach dem Export wieder in den Normalzustand versetzen
+                editBtns.forEach(btn => btn.style.display = '');
+                roleSelectors.forEach(sel => sel.style.display = '');
+                roleBadges.forEach(badge => badge.style.display = '');
+            });
+        });
+
+        // --- Init ---
+        document.addEventListener('DOMContentLoaded', () => {
+            setTodayDate();
+            loadState();
+        });
+
+        // --- PWA: Service Worker Registrierung ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(() => {});
+            });
+        }
+
+    </script>
+</body>
+</html>
