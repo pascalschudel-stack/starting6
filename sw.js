@@ -1,13 +1,10 @@
-const CACHE_NAME = 'aufstellung-d1-v1';
+const CACHE_NAME = 'aufstellung-d1-v2';
 
 const PRECACHE_URLS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './vendor/html2pdf.bundle.min.js',
-  './vendor/mobile-drag-drop.css',
-  './vendor/mobile-drag-drop.min.js',
-  './vendor/mobile-drag-drop-scroll-behaviour.min.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png'

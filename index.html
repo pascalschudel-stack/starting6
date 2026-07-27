@@ -14,19 +14,6 @@
     <!-- Bibliothek für den PDF Export (lokal eingebettet für Offline-Nutzung) -->
     <script src="vendor/html2pdf.bundle.min.js"></script>
 
-    <!-- Polyfill für Drag & Drop auf Touchscreens (iPad/Mobile) -->
-    <link rel="stylesheet" href="vendor/mobile-drag-drop.css">
-    <script src="vendor/mobile-drag-drop.min.js"></script>
-    <script src="vendor/mobile-drag-drop-scroll-behaviour.min.js"></script>
-    <script>
-        // Aktiviert den Touch-Support für Drag & Drop
-        MobileDragDrop.polyfill({
-            dragImageTranslateOverride: MobileDragDrop.scrollBehaviourDragImageTranslateOverride
-        });
-        // Verhindert das Scrollen beim Ziehen auf Touch-Geräten
-        window.addEventListener('touchmove', function() {}, {passive: false});
-    </script>
-
     <style>
         body { font-family: sans-serif; display: flex; gap: 20px; padding: 20px; background-color: #f4f4f9; margin: 0; }
 
@@ -61,14 +48,12 @@
 
         .player-card {
             background: #ffffff; border: 1px solid #ccc; padding: 8px;
-            border-radius: 4px; cursor: grab; font-weight: bold; position: relative;
+            border-radius: 4px; font-weight: bold; position: relative;
             transition: all 0.2s ease; box-sizing: border-box;
             text-align: left; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            /* Wichtig für iOS/iPad: Deaktiviert Standard-Touch-Aktionen beim Wischen über die Karte */
-            touch-action: none;
         }
-        .player-card:active { cursor: grabbing; box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
-        .player-name { pointer-events: none; display: block; margin-bottom: 6px; margin-right: 20px; font-size: 1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+        .player-name { pointer-events: none; display: block; margin-bottom: 6px; margin-left: 22px; margin-right: 20px; font-size: 1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+        #court-container .player-name { margin-left: 0; }
 
         /* Badges */
         .role-badges { display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
@@ -95,11 +80,12 @@
         #court-container .role-badges { display: none; }
         #court-container .player-card { width: 90%; margin: 0; }
 
-        .player-card.highlight { background: #e8f5e9; border-color: #4caf50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.6); transform: scale(1.02); }
-        .player-card.dimmed { opacity: 0.3; filter: grayscale(50%); }
-
         .edit-btn { position: absolute; top: 3px; right: 3px; background: transparent; border: none; cursor: pointer; font-size: 1.1em; color: #666; padding: 2px 5px; border-radius: 3px; }
         .edit-btn:hover { background: rgba(0, 0, 0, 0.05); color: #000; }
+
+        .avail-btn { position: absolute; top: 3px; left: 3px; background: transparent; border: none; cursor: pointer; font-size: 1.1em; padding: 2px 5px; border-radius: 3px; }
+        .avail-btn:hover { background: rgba(0, 0, 0, 0.05); }
+        #court-container .avail-btn { display: none; }
 
         /* Rechter Bereich: Match Info, Spielfeld & PDF */
         #court-container { flex-grow: 1; display: flex; flex-direction: column; align-items: center; }
@@ -129,7 +115,6 @@
             display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 80px; cursor: pointer; transition: background 0.2s;
         }
         .slot:hover { background: rgba(255, 255, 255, 0.8); }
-        .slot.active-filter { border-color: #4caf50; background: rgba(76, 175, 80, 0.1); }
         .slot-title { font-size: 0.8em; color: #666; margin-bottom: 5px; pointer-events: none; }
 
         #libero-slot-container { margin-top: 20px; display: flex; gap: 20px; }
@@ -163,6 +148,18 @@
         .role-matrix .header { font-weight: bold; color: #555; font-size: 0.8em; margin-bottom: 5px; }
         .role-matrix .role-label { text-align: left; }
         .role-matrix input[type="checkbox"] { cursor: pointer; }
+
+        #position-modal .modal-content { width: 340px; max-height: 80vh; overflow-y: auto; }
+        .position-current-player { display: flex; justify-content: space-between; align-items: center; background: #f4f4f9; border-radius: 4px; padding: 8px 10px; margin-bottom: 15px; }
+        .position-current-player button { width: auto; margin: 0; padding: 6px 10px; font-size: 0.85em; }
+        .candidate-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; }
+        .candidate-row {
+            display: flex; justify-content: space-between; align-items: center; gap: 8px;
+            width: 100%; text-align: left; background: white; border: 1px solid #ccc; border-radius: 4px;
+            padding: 8px 10px; cursor: pointer; font-family: inherit; font-size: 0.95em; font-weight: bold;
+        }
+        .candidate-row:hover { background: #e3f2fd; border-color: #1976d2; }
+        .candidate-empty { color: #777; font-size: 0.9em; text-align: center; margin-bottom: 15px; }
 
         /* --- Mobile / Handy-Layout --- */
         @media (max-width: 700px) {
@@ -295,6 +292,16 @@
         </div>
     </div>
 
+    <!-- Position-Auswahl Modal -->
+    <div id="position-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="position-modal-title">Position</h3>
+            <div id="position-current"></div>
+            <div id="position-candidates" class="candidate-list"></div>
+            <button id="btn-cancel-position-modal" class="btn-secondary">Abbrechen</button>
+        </div>
+    </div>
+
     <script>
         let playerIdCounter = 1;
         let editingPlayerId = null;
@@ -361,12 +368,12 @@
         function createPlayerElement(id, name, roles, prefs, locationId = 'pool', currentRole = null) {
             const card = document.createElement('div');
             card.className = 'player-card';
-            card.draggable = true;
             card.id = id;
             card.setAttribute('data-roles', roles.join(','));
             card.setAttribute('data-prefs', prefs.join(','));
 
             card.innerHTML = `
+                <button class="avail-btn" onclick="toggleAvailability('${id}', event)"></button>
                 <button class="edit-btn" onclick="openModal('${id}', event)">✎</button>
                 <span class="player-name">${name}</span>
                 <div class="role-badges">${buildBadgesHTML(roles, prefs)}</div>
@@ -374,14 +381,39 @@
             `;
 
             if (currentRole && roles.includes(currentRole)) card.querySelector('.role-selector').value = currentRole;
-            addDragListener(card);
 
             const targetContainer = document.getElementById(locationId) || document.getElementById('pool');
             targetContainer.appendChild(card);
+            updateAvailButton(card);
 
             if (targetContainer.id !== 'pool' && targetContainer.id !== 'unavailable') checkPositionWarning(targetContainer, card);
             return card;
         }
+
+        function updateAvailButton(card) {
+            const btn = card.querySelector('.avail-btn');
+            if (!btn) return;
+            const isUnavailable = card.parentElement && card.parentElement.id === 'unavailable';
+            btn.textContent = isUnavailable ? '✅' : '🚫';
+            btn.title = isUnavailable ? 'Als verfügbar markieren' : 'Als nicht verfügbar markieren';
+        }
+
+        window.toggleAvailability = function(id, event) {
+            if (event) event.stopPropagation();
+            const card = document.getElementById(id);
+            const pool = document.getElementById('pool');
+            const unavailable = document.getElementById('unavailable');
+            if (card.parentElement.id === 'unavailable') {
+                pool.appendChild(card);
+            } else if (card.parentElement.id === 'pool') {
+                unavailable.appendChild(card);
+            } else {
+                return;
+            }
+            updateAvailButton(card);
+            applyFilterAndSort();
+            saveState();
+        };
 
         // --- Filter & Sort Logic ---
         function applyFilterAndSort() {
@@ -472,63 +504,98 @@
             modal.style.display = 'none';
             applyFilterAndSort();
             saveState();
-            clearHighlights();
         });
 
-        // --- Drag & Drop ---
-        function addDragListener(element) { element.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', e.target.id); }); }
+        // --- Positions-Auswahl (Klick statt Drag & Drop) ---
+        const positionModal = document.getElementById('position-modal');
+        const positionModalTitle = document.getElementById('position-modal-title');
+        const positionCurrent = document.getElementById('position-current');
+        const positionCandidates = document.getElementById('position-candidates');
+
+        function getEligiblePlayers(slot) {
+            const req = slot.getAttribute('data-req').split(',');
+            return Array.from(document.querySelectorAll('#pool .player-card')).filter(card => {
+                const roles = card.getAttribute('data-roles').split(',');
+                return roles.some(r => req.includes(r));
+            });
+        }
+
+        function openPositionModal(slot) {
+            positionModalTitle.innerText = slot.querySelector('.slot-title').innerText;
+
+            positionCurrent.innerHTML = '';
+            const currentPlayer = slot.querySelector('.player-card');
+            if (currentPlayer) {
+                const row = document.createElement('div');
+                row.className = 'position-current-player';
+                row.innerHTML = `<span>${currentPlayer.querySelector('.player-name').innerText}</span>`;
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'btn-reset';
+                removeBtn.type = 'button';
+                removeBtn.innerText = 'Entfernen';
+                removeBtn.addEventListener('click', () => {
+                    document.getElementById('pool').appendChild(currentPlayer);
+                    updateAvailButton(currentPlayer);
+                    applyFilterAndSort();
+                    saveState();
+                    closePositionModal();
+                });
+                row.appendChild(removeBtn);
+                positionCurrent.appendChild(row);
+            }
+
+            const eligible = getEligiblePlayers(slot);
+            positionCandidates.innerHTML = '';
+            if (eligible.length === 0) {
+                positionCandidates.innerHTML = '<p class="candidate-empty">Keine verfügbaren Spielerinnen für diese Position.</p>';
+            } else {
+                eligible.forEach(card => {
+                    const roles = card.getAttribute('data-roles').split(',');
+                    const prefs = card.getAttribute('data-prefs') ? card.getAttribute('data-prefs').split(',') : [];
+                    const row = document.createElement('button');
+                    row.type = 'button';
+                    row.className = 'candidate-row';
+                    row.innerHTML = `<span>${card.querySelector('.player-name').innerText}</span><span class="role-badges">${buildBadgesHTML(roles, prefs)}</span>`;
+                    row.addEventListener('click', () => assignPlayerToSlot(card, slot));
+                    positionCandidates.appendChild(row);
+                });
+            }
+
+            positionModal.style.display = 'flex';
+        }
+
+        function assignPlayerToSlot(card, slot) {
+            const existingPlayer = slot.querySelector('.player-card');
+            if (existingPlayer) document.getElementById('pool').appendChild(existingPlayer);
+
+            const requiredRoles = slot.getAttribute('data-req').split(',');
+            const roleSelector = card.querySelector('.role-selector');
+            const possibleRoles = Array.from(roleSelector.options).map(o => o.value);
+            if (!requiredRoles.includes(roleSelector.value)) {
+                const match = possibleRoles.find(r => requiredRoles.includes(r));
+                if (match) roleSelector.value = match;
+            }
+
+            slot.appendChild(card);
+            checkPositionWarning(slot, card);
+            saveState();
+            closePositionModal();
+        }
+
+        function closePositionModal() {
+            positionModal.style.display = 'none';
+        }
+
+        document.getElementById('btn-cancel-position-modal').addEventListener('click', closePositionModal);
 
         document.querySelectorAll('.slot').forEach(slot => {
-            slot.addEventListener('dragover', e => e.preventDefault());
-            slot.addEventListener('drop', handleDrop);
-
             if (slot.id !== 'pool' && slot.id !== 'unavailable') {
                 slot.addEventListener('click', (e) => {
                     if (['SELECT', 'BUTTON', 'OPTION'].includes(e.target.tagName)) return;
-                    e.stopPropagation();
-                    clearHighlights();
-                    slot.classList.add('active-filter');
-
-                    const req = slot.getAttribute('data-req').split(',');
-                    document.querySelectorAll('#pool .player-card').forEach(p => {
-                        const hasMatch = p.getAttribute('data-roles').split(',').some(r => req.includes(r));
-                        p.classList.add(hasMatch ? 'highlight' : 'dimmed');
-                    });
+                    openPositionModal(slot);
                 });
             }
         });
-
-        function handleDrop(e) {
-            e.preventDefault();
-            const playerId = e.dataTransfer.getData('text/plain');
-            const playerCard = document.getElementById(playerId);
-            const targetSlot = e.target.closest('.slot');
-
-            if (targetSlot && playerCard) {
-                const isListArea = targetSlot.id === 'pool' || targetSlot.id === 'unavailable';
-                if (!isListArea) {
-                    const existingPlayer = targetSlot.querySelector('.player-card');
-                    if (existingPlayer) document.getElementById('pool').appendChild(existingPlayer);
-                }
-
-                targetSlot.appendChild(playerCard);
-
-                if (!isListArea) {
-                    const requiredRoles = targetSlot.getAttribute('data-req').split(',');
-                    const roleSelector = playerCard.querySelector('.role-selector');
-                    const possibleRoles = Array.from(roleSelector.options).map(o => o.value);
-                    if (!requiredRoles.includes(roleSelector.value)) {
-                        const match = possibleRoles.find(r => requiredRoles.includes(r));
-                        if (match) roleSelector.value = match;
-                    }
-                    checkPositionWarning(targetSlot, playerCard);
-                } else {
-                    applyFilterAndSort();
-                }
-                clearHighlights();
-                saveState();
-            }
-        }
 
         document.addEventListener('change', (e) => {
             if (e.target.classList.contains('role-selector')) {
@@ -545,11 +612,6 @@
             slot.classList.toggle('warning', !required.includes(selected));
         }
 
-        function clearHighlights() {
-            document.querySelectorAll('.player-card').forEach(p => p.classList.remove('highlight', 'dimmed'));
-            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active-filter'));
-        }
-        document.body.addEventListener('click', (e) => { if (!e.target.closest('.slot')) clearHighlights(); });
 
         // --- Reset Buttons ---
         function resetSlots(selector) {
@@ -583,10 +645,12 @@
 
             // Ausblenden von Edit-Buttons, Dropdowns und Tags für den Export
             const editBtns = element.querySelectorAll('.edit-btn');
+            const availBtns = element.querySelectorAll('.avail-btn');
             const roleSelectors = element.querySelectorAll('.role-selector');
             const roleBadges = element.querySelectorAll('.role-badges');
 
             editBtns.forEach(btn => btn.style.display = 'none');
+            availBtns.forEach(btn => btn.style.display = 'none');
             roleSelectors.forEach(sel => sel.style.display = 'none');
             roleBadges.forEach(badge => badge.style.display = 'none');
 
@@ -601,6 +665,7 @@
             html2pdf().set(opt).from(element).save().then(() => {
                 // Elemente nach dem Export wieder in den Normalzustand versetzen
                 editBtns.forEach(btn => btn.style.display = '');
+                availBtns.forEach(btn => btn.style.display = '');
                 roleSelectors.forEach(sel => sel.style.display = '');
                 roleBadges.forEach(badge => badge.style.display = '');
             });
