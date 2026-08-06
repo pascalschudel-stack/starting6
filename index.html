@@ -53,7 +53,8 @@
             text-align: left; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
         .player-name { pointer-events: none; display: block; margin-bottom: 6px; margin-left: 22px; margin-right: 20px; font-size: 1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
-        #court-container .player-name { margin-left: 0; }
+        /* Im Feld darf der Name umbrechen statt abgeschnitten zu werden */
+        #court-container .player-name { margin: 0; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 
         /* Badges */
         .role-badges { display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
@@ -76,9 +77,14 @@
 
         .role-selector { width: 100%; padding: 4px; font-size: 0.8em; border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer; }
 
-        #pool .role-selector, #unavailable .role-selector { display: none; }
+        /* Auf dem Feld zeigt die Karte nur den Namen: Rolle, Tags und Bearbeiten-Stift bleiben ausgeblendet */
+        .role-selector { display: none; }
         #court-container .role-badges { display: none; }
-        #court-container .player-card { width: 90%; margin: 0; }
+        #court-container .edit-btn { display: none; }
+        #court-container .player-card { width: 90%; margin: 0; text-align: center; }
+
+        /* Positionsbeschriftung ("Pos 2 (Zuspiel/Diag)") ausblenden, sobald die Position besetzt ist */
+        .slot:has(.player-card) .slot-title { display: none; }
 
         .edit-btn { position: absolute; top: 3px; right: 3px; background: transparent; border: none; cursor: pointer; font-size: 1.1em; color: #666; padding: 2px 5px; border-radius: 3px; }
         .edit-btn:hover { background: rgba(0, 0, 0, 0.05); color: #000; }
@@ -179,8 +185,9 @@
                 gap: 6px; padding: 12px 8px 8px;
                 width: 100%; box-sizing: border-box;
             }
-            .slot { min-height: 64px; padding: 4px; }
+            .slot { min-height: 72px; padding: 4px; }
             .slot-title { font-size: 0.7em; }
+            #court-container .player-name { font-size: 0.85em; }
 
             #libero-slot-container { width: 100%; gap: 10px; margin-top: 12px; }
             .libero-slot { width: 100%; height: 72px; }
@@ -250,9 +257,9 @@
                 <div class="slot" id="pos3" data-req="Mittelblock"><div class="slot-title">Pos 3 (Mitte)</div><div class="warning-icon">⚠️</div></div>
                 <div class="slot" id="pos2" data-req="Zuspiel,Diagonal"><div class="slot-title">Pos 2 (Zuspiel/Diag)</div><div class="warning-icon">⚠️</div></div>
 
-                <div class="slot" id="pos1" data-req="Zuspiel,Diagonal"><div class="slot-title">Pos 1 (Zuspiel/Diag)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos5" data-req="Zuspiel,Diagonal"><div class="slot-title">Pos 5 (Zuspiel/Diag)</div><div class="warning-icon">⚠️</div></div>
                 <div class="slot" id="pos6" data-req="Mittelblock"><div class="slot-title">Pos 6 (Mitte)</div><div class="warning-icon">⚠️</div></div>
-                <div class="slot" id="pos5" data-req="Außenangriff"><div class="slot-title">Pos 5 (Außen)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos1" data-req="Außenangriff"><div class="slot-title">Pos 1 (Außen)</div><div class="warning-icon">⚠️</div></div>
             </div>
 
             <div id="libero-slot-container">
@@ -643,17 +650,6 @@
 
             const element = document.getElementById('export-area');
 
-            // Ausblenden von Edit-Buttons, Dropdowns und Tags für den Export
-            const editBtns = element.querySelectorAll('.edit-btn');
-            const availBtns = element.querySelectorAll('.avail-btn');
-            const roleSelectors = element.querySelectorAll('.role-selector');
-            const roleBadges = element.querySelectorAll('.role-badges');
-
-            editBtns.forEach(btn => btn.style.display = 'none');
-            availBtns.forEach(btn => btn.style.display = 'none');
-            roleSelectors.forEach(sel => sel.style.display = 'none');
-            roleBadges.forEach(badge => badge.style.display = 'none');
-
             const opt = {
                 margin:       10,
                 filename:     filename,
@@ -662,13 +658,7 @@
                 jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
 
-            html2pdf().set(opt).from(element).save().then(() => {
-                // Elemente nach dem Export wieder in den Normalzustand versetzen
-                editBtns.forEach(btn => btn.style.display = '');
-                availBtns.forEach(btn => btn.style.display = '');
-                roleSelectors.forEach(sel => sel.style.display = '');
-                roleBadges.forEach(badge => badge.style.display = '');
-            });
+            html2pdf().set(opt).from(element).save();
         });
 
         // --- Init ---
