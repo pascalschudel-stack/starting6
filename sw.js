@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aufstellung-d1-v2';
+const CACHE_NAME = 'aufstellung-d1-v3';
 
 const PRECACHE_URLS = [
   './',
