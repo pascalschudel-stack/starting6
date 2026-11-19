@@ -52,9 +52,17 @@
             transition: all 0.2s ease; box-sizing: border-box;
             text-align: left; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
-        .player-name { pointer-events: none; display: block; margin-bottom: 6px; margin-left: 22px; margin-right: 20px; font-size: 1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+        /* Nummer + Name stehen nebeneinander */
+        .player-main { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; margin-left: 22px; margin-right: 20px; pointer-events: none; }
+        .player-number { font-weight: bold; color: #1976d2; flex-shrink: 0; }
+        .player-number:empty { display: none; }
+        .player-name { pointer-events: none; display: block; font-size: 1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
         /* Im Feld darf der Name umbrechen statt abgeschnitten zu werden */
-        #court-container .player-name { margin: 0; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+        #court-container .player-main { margin: 0; align-items: center; justify-content: center; gap: 8px; }
+        /* bevorzugt am Leerzeichen umbrechen, nur bei zu langen Einzelwörtern im Wort */
+        #court-container .player-name { margin: 0; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; }
+        /* Rückennummer auf dem Feld so gross wie möglich */
+        #court-container .player-number { font-size: clamp(1.5rem, 5.5vw, 2.6rem); line-height: 1; color: #333; }
 
         /* Badges */
         .role-badges { display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
@@ -148,7 +156,7 @@
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: white; padding: 20px; border-radius: 8px; width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         .modal-content h3 { margin-top: 0; margin-bottom: 15px; }
-        .modal-content input[type="text"] { width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .modal-content input[type="text"], .modal-content input[type="number"] { width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
 
         .role-matrix { display: grid; grid-template-columns: 3fr 1fr 1fr; gap: 5px; margin-bottom: 15px; font-size: 0.85em; text-align: center; align-items: center; }
         .role-matrix .header { font-weight: bold; color: #555; font-size: 0.8em; margin-bottom: 5px; }
@@ -165,6 +173,7 @@
             padding: 8px 10px; cursor: pointer; font-family: inherit; font-size: 0.95em; font-weight: bold;
         }
         .candidate-row:hover { background: #e3f2fd; border-color: #1976d2; }
+        .candidate-number { display: inline-block; min-width: 1.6em; margin-right: 6px; color: #1976d2; font-weight: bold; }
         .candidate-empty { color: #777; font-size: 0.9em; text-align: center; margin-bottom: 15px; }
 
         /* --- Mobile / Handy-Layout --- */
@@ -187,7 +196,8 @@
             }
             .slot { min-height: 72px; padding: 4px; }
             .slot-title { font-size: 0.7em; }
-            #court-container .player-name { font-size: 0.85em; }
+            #court-container .player-main { gap: 4px; }
+            #court-container .player-name { font-size: 0.72em; }
 
             #libero-slot-container { width: 100%; gap: 10px; margin-top: 12px; }
             .libero-slot { width: 100%; height: 72px; }
@@ -253,13 +263,13 @@
             </div>
 
             <div id="court">
-                <div class="slot" id="pos4" data-req="Außenangriff"><div class="slot-title">Pos 4 (Außen)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos4" data-req="Diagonal"><div class="slot-title">Pos 4 (Diagonal)</div><div class="warning-icon">⚠️</div></div>
                 <div class="slot" id="pos3" data-req="Mittelblock"><div class="slot-title">Pos 3 (Mitte)</div><div class="warning-icon">⚠️</div></div>
-                <div class="slot" id="pos2" data-req="Zuspiel,Diagonal"><div class="slot-title">Pos 2 (Zuspiel/Diag)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos2" data-req="Außenangriff"><div class="slot-title">Pos 2 (Außen)</div><div class="warning-icon">⚠️</div></div>
 
-                <div class="slot" id="pos5" data-req="Zuspiel,Diagonal"><div class="slot-title">Pos 5 (Zuspiel/Diag)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos5" data-req="Außenangriff"><div class="slot-title">Pos 5 (Außen)</div><div class="warning-icon">⚠️</div></div>
                 <div class="slot" id="pos6" data-req="Mittelblock"><div class="slot-title">Pos 6 (Mitte)</div><div class="warning-icon">⚠️</div></div>
-                <div class="slot" id="pos1" data-req="Außenangriff"><div class="slot-title">Pos 1 (Außen)</div><div class="warning-icon">⚠️</div></div>
+                <div class="slot" id="pos1" data-req="Zuspiel"><div class="slot-title">Pos 1 (Zuspiel)</div><div class="warning-icon">⚠️</div></div>
             </div>
 
             <div id="libero-slot-container">
@@ -284,6 +294,7 @@
         <div class="modal-content">
             <h3 id="modal-title">Neue Spielerin</h3>
             <input type="text" id="modal-name" placeholder="Name eingeben...">
+            <input type="number" id="modal-number" placeholder="Rückennummer (optional)" min="0" max="99" inputmode="numeric">
 
             <div class="role-matrix" id="modal-matrix">
                 <div></div><div class="header">Möglich</div><div class="header">Bevorzugt</div>
@@ -320,6 +331,7 @@
                 players.push({
                     id: card.id,
                     name: card.querySelector('.player-name').innerText,
+                    number: card.getAttribute('data-number') || '',
                     roles: card.getAttribute('data-roles'),
                     prefs: card.getAttribute('data-prefs'),
                     location: card.parentElement.id,
@@ -337,7 +349,7 @@
             savedPlayers.forEach(p => {
                 const roles = p.roles.split(',');
                 const prefs = p.prefs ? p.prefs.split(',') : [];
-                createPlayerElement(p.id, p.name, roles, prefs, p.location, p.currentRole);
+                createPlayerElement(p.id, p.name, roles, prefs, p.location, p.currentRole, p.number);
             });
             applyFilterAndSort();
         }
@@ -372,17 +384,33 @@
             return rolesArray.map(role => `<option value="${role}">${role}</option>`).join('');
         }
 
-        function createPlayerElement(id, name, roles, prefs, locationId = 'pool', currentRole = null) {
+        // Rückennummer auf Ziffern begrenzen (max. 2 Stellen), leer wenn nichts erfasst
+        function cleanNumber(value) {
+            return String(value || '').replace(/[^0-9]/g, '').slice(0, 2);
+        }
+
+        // Beschriftung für die Popup-Listen: Nummer (falls vorhanden) plus Name
+        function playerLabel(card) {
+            const number = card.getAttribute('data-number');
+            const name = card.querySelector('.player-name').innerText;
+            return number ? `<span class="candidate-number">${number}</span>${name}` : name;
+        }
+
+        function createPlayerElement(id, name, roles, prefs, locationId = 'pool', currentRole = null, number = '') {
             const card = document.createElement('div');
             card.className = 'player-card';
             card.id = id;
             card.setAttribute('data-roles', roles.join(','));
             card.setAttribute('data-prefs', prefs.join(','));
+            card.setAttribute('data-number', cleanNumber(number));
 
             card.innerHTML = `
                 <button class="avail-btn" onclick="toggleAvailability('${id}', event)"></button>
                 <button class="edit-btn" onclick="openModal('${id}', event)">✎</button>
-                <span class="player-name">${name}</span>
+                <div class="player-main">
+                    <span class="player-number">${cleanNumber(number)}</span>
+                    <span class="player-name">${name}</span>
+                </div>
                 <div class="role-badges">${buildBadgesHTML(roles, prefs)}</div>
                 <select class="role-selector">${createRoleOptions(roles)}</select>
             `;
@@ -452,6 +480,7 @@
         const modal = document.getElementById('player-modal');
         const modalTitle = document.getElementById('modal-title');
         const modalName = document.getElementById('modal-name');
+        const modalNumber = document.getElementById('modal-number');
         const matrix = document.getElementById('modal-matrix');
 
         matrix.addEventListener('change', (e) => {
@@ -466,12 +495,14 @@
             if (event) event.stopPropagation();
             editingPlayerId = id;
             modalName.value = '';
+            modalNumber.value = '';
             matrix.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
 
             if (id) {
                 modalTitle.innerText = "Spielerin bearbeiten";
                 const card = document.getElementById(id);
                 modalName.value = card.querySelector('.player-name').innerText;
+                modalNumber.value = card.getAttribute('data-number') || '';
                 const roles = card.getAttribute('data-roles').split(',');
                 const prefs = card.getAttribute('data-prefs') ? card.getAttribute('data-prefs').split(',') : [];
 
@@ -485,6 +516,7 @@
 
         document.getElementById('btn-save-modal').addEventListener('click', () => {
             const name = modalName.value.trim();
+            const number = cleanNumber(modalNumber.value);
             const roles = Array.from(matrix.querySelectorAll('.chk-possible:checked')).map(cb => cb.value);
             const prefs = Array.from(matrix.querySelectorAll('.chk-pref:checked')).map(cb => cb.value);
 
@@ -497,6 +529,8 @@
                 const previousSelection = roleSelector.value;
 
                 card.querySelector('.player-name').innerText = name;
+                card.querySelector('.player-number').innerText = number;
+                card.setAttribute('data-number', number);
                 card.setAttribute('data-roles', roles.join(','));
                 card.setAttribute('data-prefs', prefs.join(','));
                 card.querySelector('.role-badges').innerHTML = buildBadgesHTML(roles, prefs);
@@ -505,7 +539,7 @@
                 if (roles.includes(previousSelection)) roleSelector.value = previousSelection;
                 if (card.parentElement.id !== 'pool' && card.parentElement.id !== 'unavailable') checkPositionWarning(card.parentElement, card);
             } else {
-                createPlayerElement('p' + playerIdCounter++, name, roles, prefs);
+                createPlayerElement('p' + playerIdCounter++, name, roles, prefs, 'pool', null, number);
             }
 
             modal.style.display = 'none';
@@ -535,7 +569,7 @@
             if (currentPlayer) {
                 const row = document.createElement('div');
                 row.className = 'position-current-player';
-                row.innerHTML = `<span>${currentPlayer.querySelector('.player-name').innerText}</span>`;
+                row.innerHTML = `<span>${playerLabel(currentPlayer)}</span>`;
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'btn-reset';
                 removeBtn.type = 'button';
@@ -562,7 +596,7 @@
                     const row = document.createElement('button');
                     row.type = 'button';
                     row.className = 'candidate-row';
-                    row.innerHTML = `<span>${card.querySelector('.player-name').innerText}</span><span class="role-badges">${buildBadgesHTML(roles, prefs)}</span>`;
+                    row.innerHTML = `<span>${playerLabel(card)}</span><span class="role-badges">${buildBadgesHTML(roles, prefs)}</span>`;
                     row.addEventListener('click', () => assignPlayerToSlot(card, slot));
                     positionCandidates.appendChild(row);
                 });
