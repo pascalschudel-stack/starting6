@@ -1,10 +1,17 @@
-const CACHE_NAME = 'aufstellung-d1-v9';
+const CACHE_NAME = 'aufstellung-d1-v10';
 
 const PRECACHE_URLS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './vendor/html2pdf.bundle.min.js',
+  './vendor/fonts/barlow-400-latin.woff2',
+  './vendor/fonts/barlow-400-latin-ext.woff2',
+  './vendor/fonts/barlow-600-latin.woff2',
+  './vendor/fonts/barlow-600-latin-ext.woff2',
+  './vendor/fonts/barlow-700-latin.woff2',
+  './vendor/fonts/barlow-700-latin-ext.woff2',
+  './vendor/fonts/barlow-condensed-700-latin.woff2',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png'
