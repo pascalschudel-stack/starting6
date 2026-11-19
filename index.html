@@ -178,6 +178,54 @@
         .candidate-number { display: inline-block; min-width: 1.6em; margin-right: 6px; color: #1976d2; font-weight: bold; }
         .candidate-empty { color: #777; font-size: 0.9em; text-align: center; margin-bottom: 15px; }
 
+        /* --- Grossanzeige (Wisch nach links) --- */
+        #fullscreen-view { display: none; position: fixed; inset: 0; background: #1b1b1b; z-index: 2000; overflow: hidden; }
+        #fullscreen-view.open { display: block; }
+
+        /* Hochformat: Inhalt um 90 Grad drehen, Breite/Hoehe getauscht */
+        #fullscreen-stage {
+            position: absolute; top: 50%; left: 50%;
+            width: 100vh; height: 100vw;
+            transform: translate(-50%, -50%) rotate(90deg);
+            padding: 2.4vh; box-sizing: border-box;
+        }
+
+        #fullscreen-court {
+            display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
+            gap: 1.6vh; width: 100%; height: 100%;
+        }
+
+        .fs-slot {
+            background: #fff; border-radius: 1.2vh; overflow: hidden;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; padding: 1vh; box-sizing: border-box;
+        }
+        .fs-slot.empty { background: rgba(255, 255, 255, 0.1); }
+
+        .fs-number { font-weight: bold; line-height: 1; color: #111; font-size: min(24vh, 30vw); }
+        .fs-name { font-weight: bold; color: #333; margin-top: 0.8vh; font-size: min(3.2vh, 4.6vw); overflow-wrap: break-word; }
+        .fs-name-only { font-size: min(7vh, 11vw); margin-top: 0; }
+        .fs-empty-label { color: rgba(255, 255, 255, 0.5); font-size: min(2.6vh, 4vw); }
+
+        #btn-close-fullscreen {
+            position: absolute; top: 1.2vh; right: 1.2vh; z-index: 1;
+            width: 5.2vh; height: 5.2vh; min-width: 40px; min-height: 40px;
+            border: none; border-radius: 50%; cursor: pointer;
+            background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 2.4vh;
+        }
+
+        /* Querformat-Bildschirme (Tablet/Desktop): nicht drehen, Einheiten tauschen */
+        @media (orientation: landscape) {
+            #fullscreen-stage { width: 100vw; height: 100vh; transform: translate(-50%, -50%); padding: 2.4vw; }
+            #fullscreen-court { gap: 1.6vw; }
+            .fs-slot { border-radius: 1.2vw; padding: 1vw; }
+            .fs-number { font-size: min(30vh, 24vw); }
+            .fs-name { margin-top: 0.8vw; font-size: min(4.6vh, 3.2vw); }
+            .fs-name-only { font-size: min(11vh, 7vw); margin-top: 0; }
+            .fs-empty-label { font-size: min(4vh, 2.6vw); }
+            #btn-close-fullscreen { top: 1.2vw; right: 1.2vw; width: 5.2vw; height: 5.2vw; font-size: 2.4vw; }
+        }
+
         /* --- Mobile / Handy-Layout --- */
         @media (max-width: 700px) {
             body { flex-direction: column; padding: 10px; gap: 10px; }
@@ -326,6 +374,14 @@
             <div id="position-current"></div>
             <div id="position-candidates" class="candidate-list"></div>
             <button id="btn-cancel-position-modal" class="btn-secondary">Abbrechen</button>
+        </div>
+    </div>
+
+    <!-- Grossanzeige: öffnet sich mit einem Wisch nach links über dem Spielfeld -->
+    <div id="fullscreen-view">
+        <div id="fullscreen-stage">
+            <button id="btn-close-fullscreen" title="Schliessen">✕</button>
+            <div id="fullscreen-court"></div>
         </div>
     </div>
 
@@ -728,6 +784,92 @@
 
         document.getElementById('btn-rotate-right').addEventListener('click', () => rotateCourt(1));
         document.getElementById('btn-rotate-left').addEventListener('click', () => rotateCourt(-1));
+
+        // --- Grossanzeige (Wisch nach links über dem Spielfeld) ---
+        const fullscreenView = document.getElementById('fullscreen-view');
+        const fullscreenCourt = document.getElementById('fullscreen-court');
+        const FS_ORDER = [4, 3, 2, 5, 6, 1];   // gleiche Anordnung wie auf dem Spielfeld
+
+        function buildFullscreenCourt() {
+            fullscreenCourt.innerHTML = '';
+            FS_ORDER.forEach(n => {
+                const slot = document.getElementById('pos' + n);
+                const card = slot.querySelector('.player-card');
+                const cell = document.createElement('div');
+                cell.className = 'fs-slot' + (card ? '' : ' empty');
+
+                if (!card) {
+                    const label = document.createElement('div');
+                    label.className = 'fs-empty-label';
+                    label.innerText = slot.querySelector('.slot-title').innerText;
+                    cell.appendChild(label);
+                } else {
+                    const number = card.getAttribute('data-number') || '';
+                    const name = card.querySelector('.player-name').innerText;
+                    if (number) {
+                        const num = document.createElement('div');
+                        num.className = 'fs-number';
+                        num.innerText = number;
+                        cell.appendChild(num);
+                    }
+                    const nm = document.createElement('div');
+                    nm.className = 'fs-name' + (number ? '' : ' fs-name-only');
+                    nm.innerText = name;
+                    cell.appendChild(nm);
+                }
+                fullscreenCourt.appendChild(cell);
+            });
+        }
+
+        function openFullscreenView() {
+            buildFullscreenCourt();
+            fullscreenView.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeFullscreenView() {
+            fullscreenView.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
+        document.getElementById('btn-close-fullscreen').addEventListener('click', closeFullscreenView);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFullscreenView(); });
+
+        // Wischgeste auf dem Spielfeld: nach links öffnet die Grossanzeige
+        const courtEl = document.getElementById('court');
+        let swipeStartX = null, swipeStartY = null, suppressCourtClick = false;
+
+        courtEl.addEventListener('pointerdown', (e) => {
+            swipeStartX = e.clientX;
+            swipeStartY = e.clientY;
+            suppressCourtClick = false;   // Sperre gilt nur für den Klick direkt nach einem Wisch
+        });
+        courtEl.addEventListener('pointerup', (e) => {
+            if (swipeStartX === null) return;
+            const dx = e.clientX - swipeStartX;
+            const dy = e.clientY - swipeStartY;
+            swipeStartX = null;
+            if (dx < -60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+                suppressCourtClick = true;   // verhindert, dass der Wisch eine Position öffnet
+                openFullscreenView();
+            }
+        });
+        courtEl.addEventListener('pointercancel', () => { swipeStartX = null; });
+        courtEl.addEventListener('click', (e) => {
+            if (suppressCourtClick) { suppressCourtClick = false; e.stopPropagation(); e.preventDefault(); }
+        }, true);
+
+        // In der Grossanzeige schliesst ein Wisch in beliebige Richtung.
+        // (Das Bild ist gedreht, deshalb ist "nach rechts" dort keine feste Bildschirmachse.)
+        let fsStartX = null, fsStartY = null;
+        fullscreenView.addEventListener('pointerdown', (e) => { fsStartX = e.clientX; fsStartY = e.clientY; });
+        fullscreenView.addEventListener('pointerup', (e) => {
+            if (fsStartX === null) return;
+            const dx = e.clientX - fsStartX;
+            const dy = e.clientY - fsStartY;
+            fsStartX = null;
+            if (Math.hypot(dx, dy) > 60) closeFullscreenView();
+        });
 
         // --- Reset Buttons ---
         function resetSlots(selector) {
