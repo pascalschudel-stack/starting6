@@ -141,6 +141,8 @@
         /* Aktions-Buttons unterm Feld */
         .court-actions { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; align-items: center; width: 100%; max-width: 650px; }
         .reset-group { display: flex; gap: 20px; }
+        .rotate-group { display: flex; gap: 12px; align-items: center; justify-content: center; }
+        #rotation-info { font-size: 0.85em; color: #555; font-weight: bold; min-width: 9em; text-align: center; }
 
         .btn-reset {
             font-size: 0.8em; padding: 6px 12px;
@@ -204,6 +206,8 @@
 
             .court-actions { max-width: 100%; }
             .reset-group { width: 100%; }
+            .rotate-group { width: 100%; gap: 6px; }
+            #rotation-info { min-width: 0; flex: 1; font-size: 0.75em; }
             .btn-reset { flex: 1; min-height: 44px; }
             #btn-export-pdf { min-height: 48px; }
 
@@ -280,6 +284,11 @@
 
         <!-- Aktions-Buttons (Nicht im PDF) -->
         <div class="court-actions">
+            <div class="rotate-group">
+                <button id="btn-rotate-left" class="btn-reset">◀ Nach links</button>
+                <span id="rotation-info">Grundaufstellung</span>
+                <button id="btn-rotate-right" class="btn-reset">Nach rechts ▶</button>
+            </div>
             <div class="reset-group">
                 <button id="btn-reset-court" class="btn-reset">🔄 Feld leeren</button>
                 <button id="btn-reset-libero" class="btn-reset">🔄 Liberos leeren</button>
@@ -324,6 +333,25 @@
         let playerIdCounter = 1;
         let editingPlayerId = null;
 
+        // --- Rotation ---
+        // Rollen der Grundaufstellung. Beim Drehen wandert die Rolle mit der Spielerin mit,
+        // die Positionsnummern bleiben an ihrem Platz im Feld.
+        const BASE_ROLES = {
+            pos1: 'Zuspiel',
+            pos2: 'Außenangriff',
+            pos3: 'Mittelblock',
+            pos4: 'Diagonal',
+            pos5: 'Außenangriff',
+            pos6: 'Mittelblock'
+        };
+        const ROLE_SHORT = {
+            'Zuspiel': 'Zuspiel',
+            'Außenangriff': 'Außen',
+            'Mittelblock': 'Mitte',
+            'Diagonal': 'Diagonal'
+        };
+        let rotationOffset = 0;   // 0 = Grundaufstellung, 1..5 = gedreht
+
         // --- Core Functions & State Management ---
         function saveState() {
             const players = [];
@@ -340,11 +368,16 @@
             });
             localStorage.setItem('vb_players', JSON.stringify(players));
             localStorage.setItem('vb_counter', playerIdCounter);
+            localStorage.setItem('vb_rotation', rotationOffset);
         }
 
         function loadState() {
             const savedPlayers = JSON.parse(localStorage.getItem('vb_players')) || [];
             playerIdCounter = parseInt(localStorage.getItem('vb_counter')) || 1;
+
+            // Drehstand zuerst anwenden, damit die Positionen beim Einsetzen schon die richtige Rolle haben
+            rotationOffset = parseInt(localStorage.getItem('vb_rotation')) || 0;
+            applyRotationLabels();
 
             savedPlayers.forEach(p => {
                 const roles = p.roles.split(',');
@@ -653,6 +686,48 @@
             slot.classList.toggle('warning', !required.includes(selected));
         }
 
+        // --- Drehen (Rotation) ---
+        // Welche Rolle gilt auf Position n beim aktuellen Drehstand?
+        function roleForPosition(n) {
+            const source = ((n - 1 + rotationOffset) % 6) + 1;
+            return BASE_ROLES['pos' + source];
+        }
+
+        function applyRotationLabels() {
+            for (let n = 1; n <= 6; n++) {
+                const slot = document.getElementById('pos' + n);
+                const role = roleForPosition(n);
+                slot.setAttribute('data-req', role);
+                slot.querySelector('.slot-title').innerText = `Pos ${n} (${ROLE_SHORT[role]})`;
+                const card = slot.querySelector('.player-card');
+                if (card) checkPositionWarning(slot, card);
+            }
+            const info = document.getElementById('rotation-info');
+            info.innerText = rotationOffset === 0 ? 'Grundaufstellung' : `Rotation ${rotationOffset + 1}`;
+        }
+
+        // step = +1 im Uhrzeigersinn (Pos 2 rückt auf Pos 1), -1 zurück
+        function rotateCourt(step) {
+            // Erst alle Karten lösen, damit auch leere Positionen korrekt mitwandern
+            const cards = {};
+            for (let n = 1; n <= 6; n++) {
+                const card = document.getElementById('pos' + n).querySelector('.player-card');
+                cards[n] = card;
+                if (card) card.remove();
+            }
+            for (let n = 1; n <= 6; n++) {
+                const source = (((n - 1 + step) % 6) + 6) % 6 + 1;
+                const card = cards[source];
+                if (card) document.getElementById('pos' + n).appendChild(card);
+            }
+
+            rotationOffset = (((rotationOffset + step) % 6) + 6) % 6;
+            applyRotationLabels();
+            saveState();
+        }
+
+        document.getElementById('btn-rotate-right').addEventListener('click', () => rotateCourt(1));
+        document.getElementById('btn-rotate-left').addEventListener('click', () => rotateCourt(-1));
 
         // --- Reset Buttons ---
         function resetSlots(selector) {
@@ -669,7 +744,12 @@
             saveState();
         }
 
-        document.getElementById('btn-reset-court').addEventListener('click', () => resetSlots('#court .slot'));
+        document.getElementById('btn-reset-court').addEventListener('click', () => {
+            resetSlots('#court .slot');
+            rotationOffset = 0;            // leeres Feld immer in der Grundaufstellung zeigen
+            applyRotationLabels();
+            saveState();
+        });
         document.getElementById('btn-reset-libero').addEventListener('click', () => resetSlots('#libero-slot-container .slot'));
 
         // --- PDF Export ---
