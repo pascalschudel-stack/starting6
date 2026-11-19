@@ -122,6 +122,8 @@
             display: grid; grid-template-columns: repeat(3, 150px); grid-template-rows: repeat(2, 120px); gap: 10px;
             background: #ffcc80; padding: 20px; border: 5px solid white; outline: 3px solid #ff9800; border-radius: 8px; position: relative;
         }
+        /* Senkrechtes Scrollen bleibt dem Browser, waagrechtes Wischen gehoert der App */
+        #court { touch-action: pan-y; }
         #court::before { content: "NETZ"; position: absolute; top: -25px; left: 0; right: 0; text-align: center; font-weight: bold; color: #d32f2f; border-bottom: 4px dashed #d32f2f; }
 
         .slot {
@@ -179,7 +181,7 @@
         .candidate-empty { color: #777; font-size: 0.9em; text-align: center; margin-bottom: 15px; }
 
         /* --- Grossanzeige (Wisch nach links) --- */
-        #fullscreen-view { display: none; position: fixed; inset: 0; background: #1b1b1b; z-index: 2000; overflow: hidden; }
+        #fullscreen-view { display: none; position: fixed; inset: 0; background: #1b1b1b; z-index: 2000; overflow: hidden; touch-action: none; }
         #fullscreen-view.open { display: block; }
 
         /* Hochformat: Inhalt um 90 Grad drehen, Breite/Hoehe getauscht */
@@ -837,23 +839,31 @@
 
         // Wischgeste auf dem Spielfeld: nach links öffnet die Grossanzeige
         const courtEl = document.getElementById('court');
-        let swipeStartX = null, swipeStartY = null, suppressCourtClick = false;
+        let swipeStartX = null, swipeStartY = null, swipeFired = false, suppressCourtClick = false;
+
+        // Wird schon während der Bewegung ausgewertet. Würde man bis zum Loslassen warten,
+        // käme auf Android oft nur ein "pointercancel" an, sobald der Browser die Geste als Scrollen deutet.
+        function trackSwipe(x, y) {
+            if (swipeStartX === null || swipeFired) return;
+            const dx = x - swipeStartX;
+            const dy = y - swipeStartY;
+            if (dx < -55 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+                swipeFired = true;
+                suppressCourtClick = true;   // verhindert, dass der Wisch eine Position öffnet
+                openFullscreenView();
+            }
+        }
 
         courtEl.addEventListener('pointerdown', (e) => {
             swipeStartX = e.clientX;
             swipeStartY = e.clientY;
+            swipeFired = false;
             suppressCourtClick = false;   // Sperre gilt nur für den Klick direkt nach einem Wisch
+            // Pointer einfangen, damit die Bewegung auch ausserhalb des Felds noch ankommt
+            try { courtEl.setPointerCapture(e.pointerId); } catch (err) { /* nicht unterstützt */ }
         });
-        courtEl.addEventListener('pointerup', (e) => {
-            if (swipeStartX === null) return;
-            const dx = e.clientX - swipeStartX;
-            const dy = e.clientY - swipeStartY;
-            swipeStartX = null;
-            if (dx < -60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-                suppressCourtClick = true;   // verhindert, dass der Wisch eine Position öffnet
-                openFullscreenView();
-            }
-        });
+        courtEl.addEventListener('pointermove', (e) => trackSwipe(e.clientX, e.clientY));
+        courtEl.addEventListener('pointerup', (e) => { trackSwipe(e.clientX, e.clientY); swipeStartX = null; });
         courtEl.addEventListener('pointercancel', () => { swipeStartX = null; });
         courtEl.addEventListener('click', (e) => {
             if (suppressCourtClick) { suppressCourtClick = false; e.stopPropagation(); e.preventDefault(); }
@@ -861,15 +871,23 @@
 
         // In der Grossanzeige schliesst ein Wisch in beliebige Richtung.
         // (Das Bild ist gedreht, deshalb ist "nach rechts" dort keine feste Bildschirmachse.)
-        let fsStartX = null, fsStartY = null;
-        fullscreenView.addEventListener('pointerdown', (e) => { fsStartX = e.clientX; fsStartY = e.clientY; });
-        fullscreenView.addEventListener('pointerup', (e) => {
-            if (fsStartX === null) return;
-            const dx = e.clientX - fsStartX;
-            const dy = e.clientY - fsStartY;
-            fsStartX = null;
-            if (Math.hypot(dx, dy) > 60) closeFullscreenView();
+        let fsStartX = null, fsStartY = null, fsFired = false;
+
+        function trackFsSwipe(x, y) {
+            if (fsStartX === null || fsFired) return;
+            if (Math.hypot(x - fsStartX, y - fsStartY) > 55) {
+                fsFired = true;
+                closeFullscreenView();
+            }
+        }
+
+        fullscreenView.addEventListener('pointerdown', (e) => {
+            fsStartX = e.clientX; fsStartY = e.clientY; fsFired = false;
+            try { fullscreenView.setPointerCapture(e.pointerId); } catch (err) { /* nicht unterstützt */ }
         });
+        fullscreenView.addEventListener('pointermove', (e) => trackFsSwipe(e.clientX, e.clientY));
+        fullscreenView.addEventListener('pointerup', (e) => { trackFsSwipe(e.clientX, e.clientY); fsStartX = null; });
+        fullscreenView.addEventListener('pointercancel', () => { fsStartX = null; });
 
         // --- Reset Buttons ---
         function resetSlots(selector) {
