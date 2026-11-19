@@ -1,10 +1,9 @@
-const CACHE_NAME = 'aufstellung-d1-v10';
+const CACHE_NAME = 'aufstellung-d1-v11';
 
 const PRECACHE_URLS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './vendor/html2pdf.bundle.min.js',
   './vendor/fonts/barlow-400-latin.woff2',
   './vendor/fonts/barlow-400-latin-ext.woff2',
   './vendor/fonts/barlow-600-latin.woff2',
